@@ -73,6 +73,9 @@ jobs:
             AUTH_HEADER=(-H "Authorization: Bearer ${REDTEAM_API_TOKEN}")
           fi
 
+          echo "Auth Header = $AUTH_HEADER"
+          echo "REDTEAM_API_URL = $REDTEAM_API_URL"
+
           HTTP_BODY=$(mktemp)
           HTTP_CODE=$(curl -sS -o "$HTTP_BODY" -w "%{http_code}" \
             -X POST "${REDTEAM_API_URL%/}/api/v1/ci/runs" \
