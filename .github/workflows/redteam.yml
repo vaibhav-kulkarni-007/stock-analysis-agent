@@ -46,6 +46,7 @@ jobs:
           fi
 
           YML_CONTENT=$(cat .redteam.yml)
+          echo "YML Content = $YML_CONTENT"
 
           PAYLOAD=$(jq -n \
             --arg yml "$YML_CONTENT" \
@@ -64,6 +65,8 @@ jobs:
                 actor: $actor
               }
             }')
+          
+          echo "Paylaod = $PAYLOAD"
 
           AUTH_HEADER=()
           if [ -n "${REDTEAM_API_TOKEN:-}" ]; then
@@ -76,6 +79,8 @@ jobs:
             -H "Content-Type: application/json" \
             "${AUTH_HEADER[@]}" \
             --data "$PAYLOAD")
+
+          echo "HTTP Code = $HTTP_CODE"
 
           if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
             echo "::error::Red-team framework returned HTTP $HTTP_CODE"
