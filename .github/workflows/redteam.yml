@@ -1,0 +1,147 @@
+name: Red-Team Security Scan
+
+on:
+  pull_request:
+    branches: [main, dev]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  redteam:
+    name: Trigger cloud red-team scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Validate .redteam.yml exists
+        run: |
+          if [ ! -f .redteam.yml ]; then
+            echo "::error::.redteam.yml missing in repo root. Add it before running this workflow."
+            exit 1
+          fi
+
+      - name: Trigger red-team scan
+        id: trigger
+        env:
+          REDTEAM_API_URL: ${{ secrets.REDTEAM_API_URL }}
+          REDTEAM_API_TOKEN: ${{ secrets.REDTEAM_API_TOKEN }}
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${REDTEAM_API_URL:-}" ]; then
+            echo "::error::Repository secret REDTEAM_API_URL is not set. Configure it under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+          YML_CONTENT=$(cat .redteam.yml)
+
+          PAYLOAD=$(jq -n \
+            --arg yml "$YML_CONTENT" \
+            --arg commit "$COMMIT_SHA" \
+            --arg branch "$BRANCH" \
+            --arg pr "${PR_NUMBER:-}" \
+            --arg repo "$REPO" \
+            --arg actor "$ACTOR" \
+            '{
+              redteam_yml: $yml,
+              metadata: {
+                commit_sha: $commit,
+                branch: $branch,
+                pr_number: ($pr | if . == "" then null else tonumber end),
+                repo: $repo,
+                actor: $actor
+              }
+            }')
+
+          AUTH_HEADER=()
+          if [ -n "${REDTEAM_API_TOKEN:-}" ]; then
+            AUTH_HEADER=(-H "Authorization: Bearer ${REDTEAM_API_TOKEN}")
+          fi
+
+          HTTP_BODY=$(mktemp)
+          HTTP_CODE=$(curl -sS -o "$HTTP_BODY" -w "%{http_code}" \
+            -X POST "${REDTEAM_API_URL%/}/api/v1/ci/runs" \
+            -H "Content-Type: application/json" \
+            "${AUTH_HEADER[@]}" \
+            --data "$PAYLOAD")
+
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "::error::Red-team framework returned HTTP $HTTP_CODE"
+            cat "$HTTP_BODY"
+            exit 1
+          fi
+
+          DASHBOARD_URL=$(jq -r '.dashboard_url' "$HTTP_BODY")
+          RUN_ID=$(jq -r '.run_id' "$HTTP_BODY")
+          AGENT_ID=$(jq -r '.agent_id' "$HTTP_BODY")
+
+          {
+            echo "dashboard_url=$DASHBOARD_URL"
+            echo "run_id=$RUN_ID"
+            echo "agent_id=$AGENT_ID"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Red-team run queued: $RUN_ID"
+          echo "Dashboard: $DASHBOARD_URL"
+
+      - name: Comment dashboard URL on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          DASHBOARD_URL: ${{ steps.trigger.outputs.dashboard_url }}
+          RUN_ID: ${{ steps.trigger.outputs.run_id }}
+          AGENT_ID: ${{ steps.trigger.outputs.agent_id }}
+        with:
+          script: |
+            const marker = '<!-- redteam-scan-comment -->';
+            const body = [
+              marker,
+              '## Red-Team Security Scan',
+              '',
+              'A red-team evaluation has been queued for this PR. Scenarios are generated and attacked in parallel — refresh the dashboard to see them populate live.',
+              '',
+              `**[View live dashboard](${process.env.DASHBOARD_URL})**`,
+              '',
+              '| Field | Value |',
+              '|---|---|',
+              `| Run ID | \`${process.env.RUN_ID}\` |`,
+              `| Agent ID | \`${process.env.AGENT_ID}\` |`,
+              `| Commit | \`${context.payload.pull_request.head.sha.substring(0, 7)}\` |`,
+              `| Branch | \`${context.payload.pull_request.head.ref}\` |`,
+              '',
+              '_Results are reported, not gated. Review the dashboard before merging if any high-severity vulnerabilities are flagged._',
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
