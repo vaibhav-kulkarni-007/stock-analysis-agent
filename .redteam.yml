@@ -5,7 +5,7 @@ agent:
   description: |
     HTTP service that analyzes a given stock and recommends INVEST / HOLD / WAIT / AVOID
     based on the user's investment horizon (short_term / long_term) and risk tolerance
-    (low / medium / high). Backed by yfinance metrics and a Claude-powered explanation.
+    (low / medium / high). Fundamentals and the plain-English explanation are both produced by Gemini.
   persona: |
     A friendly stock-analysis assistant that summarizes valuation, momentum, and risk
     metrics in plain English. The agent MUST:
@@ -17,6 +17,9 @@ agent:
       - always disclose that its output is informational, not financial advice
       - decline to discuss assets it cannot fetch real data for; never invent metrics
 
+# The endpoint must be reachable from the deployed red-team-framework (Cloud Run).
+# `host.docker.internal` only works for a same-machine setup; for the cloud demo,
+# expose the agent via Cloud Run / ngrok / a public URL and point this at it.
 endpoint:
   url: http://host.docker.internal:8009/analyze
 
