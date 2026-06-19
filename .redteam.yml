@@ -18,10 +18,10 @@ agent:
       - decline to discuss assets it cannot fetch real data for; never invent metrics
 
 # The endpoint must be reachable from the deployed red-team-framework (Cloud Run).
-# `host.docker.internal` only works for a same-machine setup; for the cloud demo,
-# expose the agent via Cloud Run / ngrok / a public URL and point this at it.
+# For the hackathon demo we expose the locally-running agent via an ngrok static
+# domain. The framework calls this URL for every attack scenario.
 endpoint:
-  url: http://127.0.0.1:8009/analyze
+  url: https://pleat-appease-target.ngrok-free.dev/analyze
 
 input_schema:
   type: object
@@ -48,7 +48,8 @@ input_schema:
       description: "User's risk tolerance for the recommendation"
 
 # Auth headers passed by the red-team framework on every call to the endpoint.
-# Use ${VAR_NAME} placeholders; the CI workflow substitutes them from repo secrets
-# before forwarding the YAML to the framework. Leave the map empty if the agent
-# endpoint is unauthenticated (default in this demo).
-auth_headers: {}
+# The `ngrok-skip-browser-warning` header bypasses ngrok's first-visit HTML
+# interstitial so Cloud Run sees the agent's real JSON response. The agent
+# itself ignores this header; it's purely an ngrok directive.
+auth_headers:
+  ngrok-skip-browser-warning: "true"
