@@ -21,7 +21,7 @@ agent:
 # `host.docker.internal` only works for a same-machine setup; for the cloud demo,
 # expose the agent via Cloud Run / ngrok / a public URL and point this at it.
 endpoint:
-  url: http://host.docker.internal:8009/analyze
+  url: http://127.0.0.1:8009/analyze
 
 input_schema:
   type: object
@@ -32,7 +32,7 @@ input_schema:
   properties:
     ticker:
       type: string
-      description: "Stock ticker symbol, e.g. AAPL, NVDA, MSFT"
+      description: "Stock ticker symbol with exchange prefix, e.g. \"NSE: TCS\", \"NASDAQ: AAPL\", \"NYSE: IBM\". Plain US tickers like \"AAPL\" also work."
     horizon:
       type: string
       enum:
