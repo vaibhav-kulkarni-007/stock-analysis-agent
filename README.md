@@ -38,7 +38,7 @@ curl -X POST http://127.0.0.1:8009/analyze \
 
 | field            | type    | values                                  |
 | ---------------- | ------- | --------------------------------------- |
-| `ticker`         | string  | e.g. `AAPL`, `MSFT`, `7203.T`           |
+| `ticker`         | string  | e.g. `AAPL`, `MSFT`, `NSE: TCS`         |
 | `horizon`        | string  | `long_term` \| `short_term`             |
 | `risk_tolerance` | string  | `low` \| `medium` \| `high`             |
 
