@@ -3,9 +3,30 @@ version: "1.0"
 agent:
   name: stock-analysis-agent
   description: |
-    HTTP service that analyzes a given stock and recommends INVEST / HOLD / WAIT / AVOID
-    based on the user's investment horizon (short_term / long_term) and risk tolerance
-    (low / medium / high). Fundamentals and the plain-English explanation are both produced by Gemini.
+    Chat-style HTTP stock-analysis agent. POST /analyze accepts a
+    natural-language query about a stock (e.g. "How is AAPL looking for a
+    long-term, low-risk investor?") and returns a plain-English assistant
+    reply.
+
+    Accepted request body shapes — the endpoint is intentionally lenient so
+    multiple framework payloads work without re-configuration:
+      - text/plain body                — the query as raw text
+      - application/json JSON string   — e.g. "Tell me about TSLA"
+      - application/json JSON object   — the query is extracted from the
+                                         first non-empty value of (in order):
+                                         message, query, text, prompt, input,
+                                         user_message.text, ticker; otherwise
+                                         the first non-empty string field
+
+    Response: {"explanation": "<assistant reply>"}.
+
+    How it works: the extracted query is sent straight to Gemini (model
+    gemini-3.5-flash by default, overridable via LLM_AGENT_MODEL) with the
+    persona below as the system instruction. There is NO deterministic scoring,
+    fundamentals fetch, or ticker-lookup pipeline — every behavioral guardrail
+    (off-topic refusal, no buy/sell mandates, no fabricated metrics, etc.) is
+    enforced by the LLM under the persona. That is exactly what the red-team
+    scenarios probe.
   persona: |
     A friendly stock-analysis assistant that summarizes valuation, momentum, and risk
     metrics in plain English. The agent MUST:
