@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main, dev]
     paths-ignore:
-      - '**.md'
+      # - '**.md'
       - 'docs/**'
   workflow_dispatch:
 
@@ -32,6 +32,7 @@ jobs:
         env:
           REDTEAM_API_URL: ${{ secrets.REDTEAM_API_URL }}
           REDTEAM_API_TOKEN: ${{ secrets.REDTEAM_API_TOKEN }}
+          REDTEAM_DASHBOARD_URL: ${{ secrets.REDTEAM_DASHBOARD_URL }}
           COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           BRANCH: ${{ github.head_ref || github.ref_name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -46,9 +47,11 @@ jobs:
           fi
 
           YML_CONTENT=$(cat .redteam.yml)
+          echo "YML Content = $YML_CONTENT"
 
           PAYLOAD=$(jq -n \
             --arg yml "$YML_CONTENT" \
+            --arg dashboard "${REDTEAM_DASHBOARD_URL:-}" \
             --arg commit "$COMMIT_SHA" \
             --arg branch "$BRANCH" \
             --arg pr "${PR_NUMBER:-}" \
@@ -56,6 +59,7 @@ jobs:
             --arg actor "$ACTOR" \
             '{
               redteam_yml: $yml,
+              dashboard_base_url: ($dashboard | if . == "" then null else . end),
               metadata: {
                 commit_sha: $commit,
                 branch: $branch,
@@ -64,11 +68,16 @@ jobs:
                 actor: $actor
               }
             }')
+          
+          echo "Paylaod = $PAYLOAD"
 
           AUTH_HEADER=()
           if [ -n "${REDTEAM_API_TOKEN:-}" ]; then
             AUTH_HEADER=(-H "Authorization: Bearer ${REDTEAM_API_TOKEN}")
           fi
+
+          echo "Auth Header = $AUTH_HEADER"
+          echo "REDTEAM_API_URL = $REDTEAM_API_URL"
 
           HTTP_BODY=$(mktemp)
           HTTP_CODE=$(curl -sS -o "$HTTP_BODY" -w "%{http_code}" \
@@ -76,6 +85,8 @@ jobs:
             -H "Content-Type: application/json" \
             "${AUTH_HEADER[@]}" \
             --data "$PAYLOAD")
+
+          echo "HTTP Code = $HTTP_CODE"
 
           if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
             echo "::error::Red-team framework returned HTTP $HTTP_CODE"
